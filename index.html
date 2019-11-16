@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Proyecto STR</title>
+  <link href="https://unpkg.com/bulma@0.8.0/css/bulma.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.min.css" rel="stylesheet">
+</head>
+
+<body>
+
+  <nav class="navbar is-warning is-bold" role="navigation" aria-label="dropdown navigation">
+    <a class="navbar-item">
+      <span class="subtitle">Regresion lineal</span>
+    </a>
+  </nav>
+
+  <section class="hero is-warning is-bold is-hidden">
+    <div class="hero-body">
+      <p class="title">
+        Realtime data
+      </p>
+      <p class="subtitle">
+        Para visualizar en tiempo real las mediciones de los diferentes sensores
+      </p>
+    </div>
+  </section>
+
+  <div class="container is-fluid" id="app">
+    <br>
+    <div class="columns">
+      <div class="column is-4">
+
+        <div class="field">
+          <label class="label">Data</label>
+          <div class="control">
+            <input class="input is-warning" type="text" placeholder="x0,y0;x1,y1;...;xn,yn;" v-model="data">
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="control">
+            <div class="buttons">
+              <button class="button is-link" @click="genera_data">Generar data</button>
+              <button class="button" @click="graficar">Graficar</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label">Ecuaci&oacute;n de la recta</label>
+          <div class="control">
+            <input class="input is-warning" type="text" placeholder="y = M*x + C" v-model="ecuacion" readonly>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label">Predicci&oacute;n</label>
+          <div class="control">
+            <input class="input is-warning" type="text" placeholder="Ingrese el valor de x" v-model="x">
+          </div>
+
+        </div>
+
+        <div class="field">
+          <div class="control">
+            <button class="button is-link" @click="predecir">Predecir</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="control">
+            <input class="input is-warning" type="text" placeholder="y = ?" v-model="message" readonly>
+          </div>
+        </div>
+
+      </div>
+      <div class="column">
+        <canvas id="canvas"></canvas>
+      </div>
+    </div>
+    <br>
+  </div>
+
+  <!--suppress JSUnresolvedLibraryURL -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.0/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/locale/es-us.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/regression/1.4.0/regression.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.x/dist/vue.js"></script>
+  <script>
+
+    /* adopted from http://randomcolour.com */
+    const randomColor = function () {
+      var bg_colour = Math.floor(Math.random() * 16777215).toString(16);
+      bg_colour = "#" + ("000000" + bg_colour).slice(-6);
+      return bg_colour;
+    }
+
+    let vueapp = new Vue({
+
+      el: '#app',
+
+      data() {
+
+        let randColor = randomColor();
+        return {
+          data: "",
+          lineChart: null,
+          gradient: 0,
+          yIntercept: 0,
+          x: 0,
+          y: 0,
+          config: {
+            type: 'scatter',
+            data: {
+              labels: [],
+              datasets: [{
+                label: "Datos",
+                backgroundColor: randomColor(),
+                data: []
+              },{
+                type: 'line',
+                label: "regression",
+                backgroundColor: randColor,
+                borderColor: randColor,
+                showLine: true,
+                fill: false,
+                data: []
+              }],
+            },
+            options: {
+              responsive: true,
+              title: {
+                display: false,
+                text: 'Regresion lineal'
+              },
+              tooltips: {
+                mode: 'index',
+                intersect: false,
+              },
+              hover: {
+                mode: 'nearest',
+                intersect: true
+              },
+              scales: {
+              },
+            }
+          }
+        }
+      },
+
+      mounted() {
+        const context = document.getElementById('canvas').getContext('2d');
+        this.lineChart = new Chart(context, this.config);
+      },
+
+      computed: {
+        message() {
+          return `y = ${this.y}`;
+        },
+
+        ecuacion() {
+          return `y = ${this.gradient}*x + ${this.yIntercept}`
+        }
+      },
+
+      methods: {
+        randint(min, max) {
+          return Math.floor(Math.random() * (max - min)) + min;
+        },
+
+        genera_data() {
+          let points = this.randint(20, 50);
+          let texto = "";
+
+          for (var i = 1; i <= points; i++) {
+            let x = this.randint(-50, 50);
+            let y = this.randint(-50, 50);
+            texto += `${x},${y};`
+          }
+
+          this.data = texto;
+          this.graficar();
+        },
+
+        graficar() {
+          let expresiones = this.data.split(";");
+
+          let data = [];
+          expresiones.forEach((e) => {
+            if (e.length <= 0) return;
+
+            let exp = e.split(",");
+            let x = parseInt(exp[0]);
+            let y = parseInt(exp[1]);
+            data.push({ x, y });
+
+          });
+
+          this.config.data.datasets[0].data = data;
+          this.lineChart.update();
+
+          /* computar regresion lineal */
+          let regression_data = data.map(o => [o.x, o.y]);
+          let result = regression('linear', regression_data);
+          console.log(result);
+
+          this.gradient = result.equation[0];
+          this.yIntercept = result.equation[1];
+
+          this.config.data.datasets[1].data = [{x: -50, y: this.predict(-50)}, {x: 50, y: this.predict(50)}];
+          this.lineChart.update();
+
+        },
+
+        predict(x) {
+          return this.gradient * x + this.yIntercept;
+        },
+
+        predecir() {
+          this.y = this.predict(this.x);
+        }
+      }
+    })
+  </script>
+
+  <footer class="footer">
+    <div class="content has-text-centered">
+      <p>
+        <strong>Trabajo realizado</strong> por <a href="#">Luis Mejia</a> &amp; <a href="#">Saad Bittar</a>. El codigo
+        fuente esta licenciado bajo
+        <a href="http://opensource.org/licenses/mit-license.php">MIT</a>.
+      </p>
+    </div>
+  </footer>
+
+</body>
+
+</html>
